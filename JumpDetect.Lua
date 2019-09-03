@@ -6,5 +6,6 @@ local h = p.Parent:FindFirstChild("Humanoid)
     h.StateChanged:Connect(function(oldState,newState) --enum 3 is jumping
       if newState == 3 then -- jumped!
         h:TakeDamage(9001) -- IT'S OVAR 9000!!!
+      end
     end)
 end)
