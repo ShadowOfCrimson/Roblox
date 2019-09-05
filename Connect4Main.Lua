@@ -118,7 +118,7 @@ function calculate(matrix,x,y)
 										end
 									end
 									
-								--[[DIAGONAL CHECKING]]-- Needs to be fixed!
+								--[[DIAGONAL CHECKING]]-- 100% complete, diagonal works :D
 								elseif math.abs(q)==1 and math.abs(w)==1 then --Diagonally!
 									print("Checking diagonally!")--we have two in a row, need to find third...
 									local thirdMatch = continueLine(matrix,x,y,q,w)
