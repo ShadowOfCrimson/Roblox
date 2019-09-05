@@ -103,6 +103,7 @@ function calculate(matrix,x,y,p,l,b)
 	print("matrix(",x,", ",y,")")
 	local input = matrix[x][y]
 	local matches = {}
+	matches[x] = {}
 	
 	for q=-1,1 do --x offset
 		for w=-1,1 do --y offset
