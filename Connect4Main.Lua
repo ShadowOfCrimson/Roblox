@@ -22,6 +22,8 @@ function dropPiece(startPos,endPos,color)
 	tweeny:Play()
 end
 
+--This function is responsible for continuing down a path one more unit and checking for matches.
+
 function continueLine(matrix,x,y,dirx,diry)
 	if not(x+2*dirx<=0 or x+2*dirx>=8)then -- matrix bounds check
 		if not(y+2*diry<=0 or y+2*diry>=7) then -- matrix bounds check
@@ -29,7 +31,7 @@ function continueLine(matrix,x,y,dirx,diry)
 				local test = matrix[x+2*dirx][y+2*diry]
 				if test == matrix[x][y] then -- is the value of the same piece color?
 					return true
-					else print("Close, but no cigar!")
+					else return false
 				end
 			end
 		end
@@ -58,85 +60,22 @@ function calculate(matrix,x,y)
 							if test == input then -- two in a row
 								print("a piece touching test is a match")
 								table.insert(matches,test)
-								--[[Everything after this point is testing the points opposite of test to check for 3 in a row]]--
-								if q==0 or w==0 then -- Horizontal or Vertical
-									
-									--[[HORIZONTAL CHECKING]]-- 100% complete, horizontal works :D
-									if w==0 then --Horizontal; can't check for q==0 upwards, but can go down
-										print("checking Horizontally")
-										if not(x-q==0 or x-q==8) then --Opposite piece Within bounds
-											print("piece is within bounds")
-											if matrix[x-q][y]then -- Does the piece opposite the matching piece exist?
-												local testV = matrix[x-q][y] -- It does exist!
-												if testV == input then -- Three in a row!
-													print("Three in a row! Horizontally!")--Can be left to right or right to left
-													print("Third is at",x-q,",",y)
-													local fourthMatch = continueLine(matrix,x,y,-q,0)--continue calculating towards row left or right
-													if fourthMatch then
-														print("Fourth is at",x-2*q,",",y)
-														print("Four in a row! Winner winner, chicken dinner!!")
-													end
-												else -- only two in a row
-													print("Checking along 2 in a row path")
-													local thirdMatch = continueLine(matrix,x,y,q,w) --Check along the path
-													if thirdMatch then
-														print("Three in a row --Horizontally in a line")
-														local fourthMatch = continueLine(matrix,x+q,y+w,q,w)
-														if fourthMatch then
-															print("Four in a row! Winner winner, chicken dinner!!")
-														end
-													end
-												end
-											end
-										else -- piece opp doesn't exist, but go down the row the other way
-										print("Checking along 2 in a row path")
-											local thirdMatch = continueLine(matrix,x,y,q,w) --Check along the path
-											if thirdMatch then
-												print("Three in a row --Horizontally in a line")
-												local fourthMatch = continueLine(matrix,x+q,y+w,q,w)
-												if fourthMatch then
-													print("Four in a row! Winner winner, chicken dinner!!")
-												end
-											end
-										end
-										
-									--[[VERTICAL CHECKING]]-- 100% complete, vertical works :D
-									elseif q==0 and w==-1 then --check down
-										if matrix[x][y+w] then --if it exists
-											local testDown = matrix[x][y+w]
-											if testDown == input then --the piece below matches!
-												print("Piece below is a match!")
-												local thirdMatch = continueLine(matrix,x,y,0,w)
-												if thirdMatch then
-													print("Three vertically stacked matches...")
-													local fourthMatch = continueLine(matrix,x,y+w,0,w)
-													if fourthMatch then
-														print("Four in a row! Winner winner, chicken dinner!!")
-													end
-												end
-											end
+								--[[Test points assuming it is an end point of a 4-in-a-row condition.
+								If this is not true, check for the fourth match on opposite side.
+								If that is not true either, we are not interested in this condition.]]--
+								local thirdMatch = continueLine(matrix,x,y,q,w)
+								if thirdMatch then --if we have a third match...
+									print("Three in a row...")
+									local fourthMatch = continueLine(matrix,x+q,y+w,q,w)
+									if fourthMatch then
+										print("Four in a row! Winner winner, chicken dinner!!")
+									else --not a fourth, so look for the last one on opposite side!
+										local fourthMatch = continueLine(matrix, x, y, -q, -w)
+										if fourthMatch then -- Opposite side exists and matches!
+										print("Four in a row! Winner winner, chicken dinner!!")
 										end
 									end
-									
-								--[[DIAGONAL CHECKING]]-- 100% complete, diagonal works :D
-								elseif math.abs(q)==1 and math.abs(w)==1 then --Diagonally!
-									print("Checking diagonally!")--we have two in a row, need to find third...
-									local thirdMatch = continueLine(matrix,x,y,q,w)
-									if thirdMatch then --if we have a third match...
-										local fourthMatch = continueLine(matrix,x+q,y+w,q,w)
-										if fourthMatch then
-											print("Four in a row! Winner winner, chicken dinner!!")
-										else --not a fourth, so look for the last one on opposite side!
-											local fourthMatch = continueLine(matrix, x, y, -q, -w)
-											if fourthMatch then -- Opposite side exists and matches!
-											print("Four in a row! Winner winner, chicken dinner!!")
-											end
-										end
-									else print("Only two in a row, ignore this condition")
-									end
-									
-								else--This will never occur because it will always be either orthogonal or diagonal
-									print("ERROR MATH IS WRONG")
+								else print("Only two in a row, ignore this condition")
 								end
 							end
 						end
