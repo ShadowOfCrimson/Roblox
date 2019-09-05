@@ -23,8 +23,8 @@ function dropPiece(startPos,endPos,color)
 end
 
 function continueLine(matrix,x,y,dirx,diry)
-	if not(x+2*dirx==0 or x+2*dirx==8)then -- matrix bounds check
-		if not(y+2*diry==0 or y+2*diry==7) then -- matrix bounds check
+	if not(x+2*dirx<=0 or x+2*dirx>=8)then -- matrix bounds check
+		if not(y+2*diry<=0 or y+2*diry>=7) then -- matrix bounds check
 			if matrix[x+2*dirx][y+2*diry] then -- does this exist in the matrix?
 				local test = matrix[x+2*dirx][y+2*diry]
 				if test == matrix[x][y] then -- is the value of the same piece color?
@@ -120,52 +120,19 @@ function calculate(matrix,x,y)
 									
 								--[[DIAGONAL CHECKING]]-- Needs to be fixed!
 								elseif math.abs(q)==1 and math.abs(w)==1 then --Diagonally!
-									print("Checking diagonally!")
-									if q==-1 and w==-1 then --bottom left, get opposite (top right)
-										if not(x-q==0 or x-q==8) and not(y-w==0 or y-w==7)then --within bounds
-											print("piece is within bounds")
-											if matrix[x-q][y-w] then -- Does the top right piece exist?
-												if matrix[x-q][y-w] == input then --It's a match! (3 in a row)
-													print("Three in a row! Diagonally!")--From bottom left to top right
-													local fourthMatch = continueLine(matrix,x-q,y-w,-q,-w)
-													if fourthMatch then
-														print("Four in a row! Winner winner, chicken dinner!!")
-													end
-												end
-											elseif not matrix[x-q][y-w] then -- Opposite doesn't exist, continue along path
-												local thirdMatch = continueLine(matrix,x,y,q,w)
-												if thirdMatch then
-													print("Three diagonally stacked matches...")
-													local fourthMatch = continueLine(matrix,x,y+w,0,w)
-													if fourthMatch then
-														print("Four in a row! Winner winner, chicken dinner!!")
-													end
-												end
+									print("Checking diagonally!")--we have two in a row, need to find third...
+									local thirdMatch = continueLine(matrix,x,y,q,w)
+									if thirdMatch then --if we have a third match...
+										local fourthMatch = continueLine(matrix,x+q,y+w,q,w)
+										if fourthMatch then
+											print("Four in a row! Winner winner, chicken dinner!!")
+										else --not a fourth, so look for the last one on opposite side!
+											local fourthMatch = continueLine(matrix, x, y, -q, -w)
+											if fourthMatch then -- Opposite side exists and matches!
+											print("Four in a row! Winner winner, chicken dinner!!")
 											end
 										end
-									elseif q==-1 and w==1 then --top left, get opposite (bottom right)
-										if not(x-q==0 or x-q==8) and not(y-w==0 or y-w==7) then -- within bounds
-											print("piece is within bounds")
-											if matrix[x-q][y-w] then -- Does the bottom right piece exist?
-												if matrix[x-q][y-w] == input then --It's a match! (3 in a row)
-													print("Three in a row! Diagonally!")--From top left to bottom right
-													local fourthMatch = continueLine(matrix,x-q,y-w,-q,-w)
-													if fourthMatch then
-														print("Four in a row! Winner winner, chicken dinner!!")
-													end
-												end
-											elseif not matrix[x-q][y-w] then -- Opposite doesn't exist, continue along path
-												print("Not 100% sure about this logic...")
-												local thirdMatch = continueLine(matrix,x,y,q,w)
-												if thirdMatch then
-													print("Three diagonally stacked matches...")
-													local fourthMatch = continueLine(matrix,x,y+w,0,w)
-													if fourthMatch then
-														print("Four in a row! Winner winner, chicken dinner!!")
-													end
-												end
-											end
-										end
+									else print("Only two in a row, ignore this condition")
 									end
 									
 								else--This will never occur because it will always be either orthogonal or diagonal
