@@ -26,9 +26,45 @@ end
 
 --[[GameScript Starts Here!]]--
 
+--The end function for a tie game
+
+function TieGame(p1, p2, board)
+	print("The board is full, restart game.")
+	local gameParts = board.Pieces:getChildren()
+	board.BaseBoardParts.Bottom.CanCollide = false
+	wait(2)
+	for i,v in pairs(gameParts) do
+		local originalPos = v.CFrame
+		v.Anchored = false
+		v.Size = Vector3.new(.9, 2, 2)
+		v.CFrame = originalPos
+		game.Debris:AddItem(v, 5)
+	end
+	wait(3)
+	board.BaseBoardParts.Bottom.CanCollide = true
+	RemoveFromTable(playing, p1)
+	RemoveFromTable(playing, p2)
+	table.insert(players, p1)
+	table.insert(players, p2)
+	for x = 1,7 do
+		print(connections[board.Name][x])
+		local c = connections[board.Name][x]
+		c:Disconnect()
+	end
+	board.InUse.Value = false
+	startQueue()
+end
+
+--The end function for a won game
+
 function Winner(winner, loser, board)
 	print("Four in a row! Winner winner, chicken dinner!!")
 	print(winner,"has won the game!")
+	for x = 1,7 do --Disconnect listening events because players cannot place more pieces after game is over!
+		print(connections[board.Name][x])
+		local c = connections[board.Name][x]
+		c:Disconnect()
+	end
 	local gameParts = board.Pieces:getChildren()
 	board.BaseBoardParts.Bottom.CanCollide = false
 	wait(2)
@@ -45,12 +81,30 @@ function Winner(winner, loser, board)
 	RemoveFromTable(playing, loser)
 	table.insert(players, winner)
 	table.insert(players, loser)
-	for x = 1,7 do
-		print(connections[board.Name][x])
-		connections[board.Name][x]:Disconnect()
-	end
 	board.InUse.Value = false
 	startQueue()
+end
+
+--This function takes a matrix and checks all internal values are non zero
+
+function checkBoard(matrix)
+	local full = true
+	for x = 1,#matrix do
+		for y = 1,#matrix[x] do
+			if matrix[x][y] == 0 then
+				full = false
+			end
+		end
+	end
+	return full
+end
+
+--Troubleshooting function responsible for printing the table given
+	
+function printTable(input)
+	for i=1,#input do
+		print(input[i])
+	end
 end
 
 --Troubleshooting function responsible for printing off grid data
@@ -139,7 +193,7 @@ function calculate(matrix,x,y,p,l,b)
 										print("Special Condition")--Currently does not fire, find out why
 										end
 									end
-								else --print("Only two in a row, ignore this condition")
+								else print("Only two in a row, ignore this condition")
 								end
 							end
 						end
@@ -207,6 +261,12 @@ function initiateClickers(b,p1,p2) --Here b = the board players are using to pla
 					gridData[x][1+counter/2]=1
 					wait(1)
 					calculate(gridData,x,(1+counter/2),p1,p2,b)
+					if counter == 10 then -- this filled the column, so check if board is full :)
+						local boardFull = checkBoard(gridData)
+						if boardFull then
+						TieGame(p1, p2, b)
+						end
+					end
 				elseif player == p2 and counter ~= 12 and clickedLast ~= p2 then--Twioe as much because of parts being 2x2 in size
 					clickedLast = p2
 					dropPiece(b,
@@ -217,9 +277,15 @@ function initiateClickers(b,p1,p2) --Here b = the board players are using to pla
 					gridData[x][1+counter/2]=2
 					wait(1)
 					calculate(gridData,x,(1+counter/2),p2,p1,b)
+					if counter == 10 then -- this filled the column, so check if board is full :)
+						local boardFull = checkBoard(gridData)
+						if boardFull then
+						TieGame(p1, p2, b)
+						end
+					end
 				else print(player,"isn't allowed to play a move!")
 			end
-		end) print(connections[b.Name][x],"is at index",x)
+		end) --print(connections[b.Name][x],"is at index",x)
 	end
 end
 
@@ -229,51 +295,87 @@ end
 --finds players in table that match with playing and removes them from players
 
 function startGame(p1,p2)
-	print(p1,"and",p2,"are starting a game of Connect 4!")
-	table.insert(playing,p1)
-	table.insert(playing,p2)
-	local newPlayers = {}
-        for i1,v1 in pairs(players) do
-            local IsPlaying = false
-            for i2,v2 in pairs(playing) do
-                if v1 == v2 then
-                    IsPlaying = true--player is playing
-                    break--don't continue to search for more, we found it.
-                end
-            end
-            if not IsPlaying then--all players who are NOT playing
-                table.insert(newPlayers, v1)
-            end
-        end
-	players = newPlayers
-	--print(#players,"After starting a game")
-	local board = nil
-	boards = workspace.Boards:GetChildren()
-	for i,v in pairs(boards) do
-		if v.InUse.Value == false then
-			board = v
-			board.InUse.Value = true
-			repeat wait() until p1.Character
-			--trapCharacter(player1.Character)
-			p1.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(5,2,0)
-			repeat wait() until p2.Character
-			--trapCharacter(player2.Character)
-			p2.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(-5,2,0)
-			break
-		else
-			--print("We ran out of boards!")--If this breaks here, no boards are available!
+	if p1~=p2 then
+		print(p1,"and",p2,"are starting a game of Connect 4!")
+		table.insert(playing,p1)
+		table.insert(playing,p2)
+		local newPlayers = {}
+	        for i1,v1 in pairs(players) do
+	            local IsPlaying = false
+	            for i2,v2 in pairs(playing) do
+	                if v1 == v2 then
+	                    IsPlaying = true--player is playing
+	                    break--don't continue to search for more, we found it.
+	                end
+	            end
+	            if not IsPlaying then--all players who are NOT playing
+	                table.insert(newPlayers, v1)
+	            end
+	        end
+		players = newPlayers
+		--print(#players,"After starting a game")
+		local board = nil
+		boards = workspace.Boards:GetChildren()
+		for i,v in pairs(boards) do
+			if v.InUse.Value == false then
+				board = v
+				board.InUse.Value = true
+				repeat wait() until p1.Character
+				--trapCharacter(player1.Character)
+				p1.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(5,2,0)
+				repeat wait() until p2.Character
+				--trapCharacter(player2.Character)
+				p2.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(-5,2,0)
+				break
+			else
+				print("We ran out of boards!")--If this breaks here, no boards are available!
+			end
+		end
+		if board then
+		initiateClickers(board,p1,p2)
+		end
+	else
+		print("Tried to queue player with self")
+		printTable(players)
+	end
+end
+
+--Check players to see if they are ready to play a game
+function checkPlayers()
+	local Ready = true
+	for x = 1,2 do
+		for i,v in pairs(playing) do
+			if players[x] == v then
+				print("Player",players[x],"is in a game")
+				RemoveFromTable(players,v)
+				Ready = false
+			end
 		end
 	end
-	initiateClickers(board,p1,p2)
+	if Ready then
+		return true
+	else print("Not ready for game")
+		startQueue()
+		return false
+	end
 end
 
 --If there are two players ready to play, queue them into a game
 
 function startQueue()
-	wait()
 	if #game.Players:GetChildren()>#playing then
-		--print("Can queue 1 game")
-		startGame(players[1],players[2])
+		if #players == 2 then
+			local goodToGo = checkPlayers()
+			if goodToGo then
+				startGame(players[1],players[2])
+			end
+		elseif #players > 2 then --pick random 2 of set
+		local randomNumber = math.random(2,#players)
+			local goodToGo = checkPlayers()
+			if goodToGo then
+				startGame(players[1], players[randomNumber])
+			end
+		end
 	end
 end
 
