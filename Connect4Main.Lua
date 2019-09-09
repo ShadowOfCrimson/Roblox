@@ -1,9 +1,23 @@
 local players = {}
 local playing = {}
 local boards = {}
+local gameInstances = {}
 local PhysicsService = game:GetService("PhysicsService")
 local connections = {}
 local detectors = {}
+
+--[[Game Loading Boards]]--
+--I use this to refresh the game board with the latest version from ServerStorage
+--This part runs as soon as the server starts so boards are always loaded from storage
+
+for i=1,4 do
+	board = game.ServerStorage.Connect4Board:Clone()
+	board:SetPrimaryPartCFrame(CFrame.new(Vector3.new(0,6.374,0))
+	*CFrame.Angles(0,math.rad(90)*i,0)
+	*CFrame.new(Vector3.new(-35,0 , 0)))
+	board.Name = board.Name..i
+	board.Parent = game.Workspace.Boards
+end
 
 --Create a table of detectors in order from 1-7
 function findDetectors(b)
@@ -20,6 +34,23 @@ function RemoveFromTable(InputTable, Value)
 	for i,v in pairs(InputTable) do
 		if v == Value then
 			table.remove(InputTable, i)
+		end
+	end
+end
+
+--Disconnects listening events from board given
+
+function disconnectBoard(boardName)
+	for x = 1,7 do --Disconnect listening events because players cannot place more pieces after game is over!
+		if boardName then
+			for i,v in pairs(connections)do
+				print(v)
+			end
+			--[[print(connections[boardName][x])
+			if connections[boardName][x]then
+			local c = connections[boardName][x]
+			c:Disconnect()
+			end]]
 		end
 	end
 end
@@ -46,11 +77,7 @@ function TieGame(p1, p2, board)
 	RemoveFromTable(playing, p2)
 	table.insert(players, p1)
 	table.insert(players, p2)
-	for x = 1,7 do
-		print(connections[board.Name][x])
-		local c = connections[board.Name][x]
-		c:Disconnect()
-	end
+	disconnectBoard(board.Name)
 	board.InUse.Value = false
 	startQueue()
 end
@@ -60,11 +87,7 @@ end
 function Winner(winner, loser, board)
 	print("Four in a row! Winner winner, chicken dinner!!")
 	print(winner,"has won the game!")
-	for x = 1,7 do --Disconnect listening events because players cannot place more pieces after game is over!
-		print(connections[board.Name][x])
-		local c = connections[board.Name][x]
-		c:Disconnect()
-	end
+	disconnectBoard(board.Name)
 	local gameParts = board.Pieces:getChildren()
 	board.BaseBoardParts.Bottom.CanCollide = false
 	wait(2)
@@ -83,6 +106,18 @@ function Winner(winner, loser, board)
 	table.insert(players, loser)
 	board.InUse.Value = false
 	startQueue()
+end
+
+--function cleans the parts from a board physically, they are not linked in any way currently to the matrix
+
+function cleanBoard(b)
+	local parts = workspace.Boards:FindFirstChild(b).Pieces:GetChildren()
+	for i,v in pairs(parts)do
+		if v then
+			v:Destroy()
+			print("Destroyed a piece")
+		end
+	end
 end
 
 --This function takes a matrix and checks all internal values are non zero
@@ -317,22 +352,29 @@ function startGame(p1,p2)
 		local board = nil
 		boards = workspace.Boards:GetChildren()
 		for i,v in pairs(boards) do
+			for n,a in pairs(gameInstances)do
+				if not gameInstances[v] then
+					print(v,"is boards, and instances is",a)
+				else print("using board: ",v)
+				end 
+			end
 			if v.InUse.Value == false then
-				board = v
-				board.InUse.Value = true
+				board = v--found a board, make this value the board
+				board.InUse.Value = true--Hey! We're using this board here!
 				repeat wait() until p1.Character
 				--trapCharacter(player1.Character)
 				p1.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(5,2,0)
 				repeat wait() until p2.Character
 				--trapCharacter(player2.Character)
 				p2.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(-5,2,0)
+				initiateClickers(board,p1,p2)
+				gameInstances[board.Name] = {}
+				table.insert(gameInstances[board.Name],1,p1)
+				table.insert(gameInstances[board.Name],2,p2)
 				break
 			else
 				print("We ran out of boards!")--If this breaks here, no boards are available!
 			end
-		end
-		if board then
-		initiateClickers(board,p1,p2)
 		end
 	else
 		print("Tried to queue player with self")
@@ -412,9 +454,28 @@ game.Players.PlayerAdded:Connect(function(player)
 	end
 end)
 
---remove player from all tables when they leave
+--remove player and partner from all tables when they leave
 
 game.Players.ChildRemoved:Connect(function(player)
 	RemoveFromTable(players, player)
 	RemoveFromTable(playing, player)
+	for i,v in pairs(gameInstances)do
+		for n,t in pairs(gameInstances[i])do
+			--print(gameInstances[i][n])
+			if t == player then
+				for x = 1,2 do -- place the player back into the game cycle, then requeue him, clean board
+					if gameInstances[i][x] ~= player then
+						RemoveFromTable(playing, gameInstances[i][x])
+						table.insert(players, gameInstances[i][x])
+						startQueue()
+						cleanBoard(i)
+						disconnectBoard(board.Name)
+					end
+				end
+				gameInstances[i]={}
+				print(gameInstances[i][n]) --This should be nil
+				break
+			end
+		end
+	end
 end)
