@@ -1,198 +1,100 @@
-local players = {}
-local playing = {}
 local boards = {}
-local gameInstances = {}
-local PhysicsService = game:GetService("PhysicsService")
-local connections = {}
-local detectors = {}
+local queue = {}
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local gameClickEvent = Instance.new("RemoteEvent", ReplicatedStorage)
+gameClickEvent.Name = "GameClickEvent"
 
---[[Game Loading Boards]]--
---I use this to refresh the game board with the latest version from ServerStorage
---This part runs as soon as the server starts so boards are always loaded from storage
-
-for i=1,4 do
-	board = game.ServerStorage.Connect4Board:Clone()
-	board:SetPrimaryPartCFrame(CFrame.new(Vector3.new(0,6.374,0))
-	*CFrame.Angles(0,math.rad(90)*i,0)
-	*CFrame.new(Vector3.new(-35,0 , 0)))
-	board.Name = board.Name..i
-	board.Parent = game.Workspace.Boards
-end
-
---Create a table of detectors in order from 1-7
-function findDetectors(b)
-	detectors[b.Name] = {}
-	for i=1,7 do
-		detectors[b.Name][i] = b.BaseBoardParts.Detectors:FindFirstChild(tostring(i))
-	end
-	return detectors
-end
-
---Loops through table and finds value, then removes it.
-	
-function RemoveFromTable(InputTable, Value)
-	for i,v in pairs(InputTable) do
-		if v == Value then
-			table.remove(InputTable, i)
-		end
-	end
-end
-
---Disconnects listening events from board given
-
-function disconnectBoard(boardName)
-	for x = 1,7 do --Disconnect listening events because players cannot place more pieces after game is over!
-		if boardName then
-			for i,v in pairs(connections)do
-				print(v)
-			end
-			--[[print(connections[boardName][x])
-			if connections[boardName][x]then
-			local c = connections[boardName][x]
-			c:Disconnect()
-			end]]
-		end
-	end
-end
-
---[[GameScript Starts Here!]]--
-
---The end function for a tie game
-
-function TieGame(p1, p2, board)
-	print("The board is full, restart game.")
-	local gameParts = board.Pieces:getChildren()
-	board.BaseBoardParts.Bottom.CanCollide = false
-	wait(2)
-	for i,v in pairs(gameParts) do
+--[[Drops pieces in gameboard
+	]]
+function dropParts(pieces)
+	for i,v in pairs(pieces) do
 		local originalPos = v.CFrame
 		v.Anchored = false
 		v.Size = Vector3.new(.9, 2, 2)
 		v.CFrame = originalPos
 		game.Debris:AddItem(v, 5)
 	end
+end
+--[[The end of a game resulting in no winner
+	Argument: board = board played on
+	]]
+function tieGame(board)
+	print("The board is full, tie game.")
+	local players={}
+	for i,v in pairs(boards[board])do
+		if i ~= "InUse" and i~= "Matrix" then
+			table.insert(players, i)
+		end
+	end
+	print("# of players is :",#players)
+	local gameBoard = workspace.Boards:FindFirstChild(board)
+	local gameParts = gameBoard.Pieces:getChildren()
+	wait(2)
+	dropParts(gameParts)
 	wait(3)
-	board.BaseBoardParts.Bottom.CanCollide = true
-	RemoveFromTable(playing, p1)
-	RemoveFromTable(playing, p2)
-	table.insert(players, p1)
-	table.insert(players, p2)
-	disconnectBoard(board.Name)
-	board.InUse.Value = false
+	gameBoard.BaseBoardParts.Bottom.CanCollide = true
+	cleanBoard(board)
+	table.insert(queue, game.Players:FindFirstChild(players[1]))
+	table.insert(queue, game.Players:FindFirstChild(players[2]))
 	startQueue()
 end
-
---The end function for a won game
-
-function Winner(winner, loser, board)
+--[[The end of a game resulting in a winner
+	Arguments:
+	board = board played on
+	winner = name of player who won game
+	]]
+function Winner(board, winner)
 	print("Four in a row! Winner winner, chicken dinner!!")
 	print(winner,"has won the game!")
-	disconnectBoard(board.Name)
-	local gameParts = board.Pieces:getChildren()
-	board.BaseBoardParts.Bottom.CanCollide = false
+	local loser = boards[board][winner]["Partner"]
+	local gameBoard = workspace.Boards:FindFirstChild(board)
+	local gameParts = gameBoard.Pieces:getChildren()
+	gameBoard.BaseBoardParts.Bottom.CanCollide = false
 	wait(2)
-	for i,v in pairs(gameParts) do
-		local originalPos = v.CFrame
-		v.Anchored = false
-		v.Size = Vector3.new(.9, 2, 2)
-		v.CFrame = originalPos
-		game.Debris:AddItem(v, 5)
-	end
+	dropParts(gameParts)
 	wait(3)
-	board.BaseBoardParts.Bottom.CanCollide = true
-	RemoveFromTable(playing, winner)
-	RemoveFromTable(playing, loser)
-	table.insert(players, winner)
-	table.insert(players, loser)
-	board.InUse.Value = false
+	gameBoard.BaseBoardParts.Bottom.CanCollide = true
+	cleanBoard(board)
+	table.insert(queue, game.Players:FindFirstChild(winner))
+	table.insert(queue, game.Players:FindFirstChild(loser))
 	startQueue()
 end
-
---function cleans the parts from a board physically, they are not linked in any way currently to the matrix
-
-function cleanBoard(b)
-	local parts = workspace.Boards:FindFirstChild(b).Pieces:GetChildren()
-	for i,v in pairs(parts)do
-		if v then
-			v:Destroy()
-			print("Destroyed a piece")
-		end
-	end
-end
-
---This function takes a matrix and checks all internal values are non zero
-
-function checkBoard(matrix)
-	local full = true
-	for x = 1,#matrix do
-		for y = 1,#matrix[x] do
-			if matrix[x][y] == 0 then
-				full = false
-			end
-		end
-	end
-	return full
-end
-
---Troubleshooting function responsible for printing the table given
-	
-function printTable(input)
-	for i=1,#input do
-		print(input[i])
-	end
-end
-
---Troubleshooting function responsible for printing off grid data
-
-function gridPrint(matrix)
-	--for y=1,6 do
-		local y=1
-		for x=1,7 do
-			print("(",x,", ",y,") =",matrix[x][y])
-		end
-	--end
-end
-
---This function is responsible for continuing down a path one more unit and checking for matches.
-
-function continueLine(matrix,x,y,dirx,diry)
+--[[This function is responsible for continuing down
+	a path one more unit and checking for matches.
+	]]
+function continueLine(board, x, y, dirx, diry)
+	local matrix = boards[board]["Matrix"]
 	if not(x+2*dirx<=0 or x+2*dirx>=8)then -- matrix bounds check
-		print("Within x-bounds")
+		--print("Within x-bounds")
 		if not(y+2*diry<=0 or y+2*diry>=7) then -- matrix bounds check
-			print("Within y-bounds")
+			--print("Within y-bounds")
 			if matrix[x+2*dirx][y+2*diry] then -- does this exist in the matrix?
-				print("Exists in matrix")
+				--print("Exists in matrix")
 				local test = matrix[x+2*dirx][y+2*diry]
 				if test == matrix[x][y] then -- is the value of the same piece color?
-					print("true")
-					print("The value here is:",matrix[x+2*dirx][y+2*diry])
+					--print("true")
+					--print("The value here is:",matrix[x+2*dirx][y+2*diry])
 					return true
 				else
-					print("false")
-					print("The value here is:",matrix[x+2*dirx][y+2*diry])
-					gridPrint(matrix)
+					--print("false")
+					--print("The value here is:",matrix[x+2*dirx][y+2*diry])
 					return false
 				end
 			end
 		end
 	end
 end
-
---calculate 4-in-a-row
---[[Arguments:
-	matrix = matrix of board spaces
-	x = x location given in matrix for new piece
-	y = y location given in matrix for new piece
-	p = player who placed piece
-	l = potential loser!! >:D
-	b = board, just so we can pass it to Winner() ;)
+--[[calculate 4-in-a-row
+	Arguments:
+	board = board played on
+	x = x coordinate of placed piece
+	y = y coordinate of placed piece
+	input = 1 or 2, the player number of placer
 	]]
-function calculate(matrix,x,y,p,l,b)
-	print("---START OF NEW MOVE--- <-------STARTING HERE BOYYYYYY")
+function calculateMove(board, x, y, input)
+	print("---START OF NEW MOVE---")
 	print("matrix(",x,", ",y,")")
-	local input = matrix[x][y]
-	local matches = {}
-	matches[x] = {}
+	local matrix = boards[board]["Matrix"]
 	
 	for q=-1,1 do --x offset
 		for w=-1,1 do --y offset
@@ -206,29 +108,27 @@ function calculate(matrix,x,y,p,l,b)
 							--print("It exists in the matrix")
 							local test = matrix[x+q][y+w]
 							if test == input then -- two in a row
-								print("matrix(",x+q,", ",y+w,")")
-								--print("a piece touching test is a match")
-								table.insert(matches,test)
+								--print("matrix(",x+q,", ",y+w,")")
 								--[[Test points assuming it is an end point of a 4-in-a-row condition.
 								If this is not true, check for the fourth match on opposite side.
 								If that is not true either, we are not interested in this condition.]]--
-								local thirdMatch = continueLine(matrix,x,y,q,w)
-								print("matrix(",x+2*q,", ",y+2*w,")")
+								local thirdMatch = continueLine(board,x,y,q,w)
+								--print("matrix(",x+2*q,", ",y+2*w,")")
 								if thirdMatch then --if we have a third match...
 									--print("Three in a row...")
-									local fourthMatch = continueLine(matrix,x+q,y+w,q,w)
+									local fourthMatch = continueLine(board,x+q,y+w,q,w)
 									if fourthMatch then
-										Winner(p,l,b)
+										return true -- WINNER
 									else --not a fourth, so look for the last one on opposite side!
-										print("Trying for special condition")--This runs currently
-										local fourthMatch = continueLine(matrix, x+q, y+w, -q, -w)
-										print("matrix(",x-q,", ",y-w,")")
+										--print("Trying for special condition")--This runs currently
+										local fourthMatch = continueLine(board, x+q, y+w, -q, -w)
+										--print("matrix(",x-q,", ",y-w,")")
 										if fourthMatch then -- Opposite side exists and matches!
-										Winner(p,l,b)
-										print("Special Condition")--Currently does not fire, find out why
+										--print("Special Condition")--Currently does not fire, find out why
+										return true -- WINNER
 										end
 									end
-								else print("Only two in a row, ignore this condition")
+								else --print("Only two in a row, ignore this condition")
 								end
 							end
 						end
@@ -237,245 +137,261 @@ function calculate(matrix,x,y,p,l,b)
 			end			
 		end
 	end
-	
-	for i,v in pairs(matches) do
-		--print(v,"is match",i)--print number of matching pieces around test item
+end
+--[[This function cleans all parts from the board given
+	]]
+function cleanBoard(board)
+	boards[board]={}
+	boards[board]["InUse"] = false
+	makeMatrix(board)
+	local parts = workspace.Boards:FindFirstChild(board).Pieces:GetChildren()
+	for i,v in pairs(parts)do
+		if v then
+			v:Destroy()
+			--print("Destroyed a piece")
+		end
 	end
 end
-
---Drops a game piece from top of column to ending position with TweeningService
---game piece will be of correct player color, update board matrix/table
-
-function dropPiece(board, startFrame,endFrame,color)
+--[[This function switches to the next player's turn
+	given the player who just went, and the board they
+	are using
+	]]
+function changeTurn(player, board)
+	if boards[board][player] then
+		for i,v in pairs(boards[board])do
+			if i ~= "InUse" and i ~= "Matrix" and i ~= player then--i = next player
+				boards[board][player]["Turn"] = false
+				boards[board][i]["Turn"] = true
+			end
+		end
+	end
+end
+--[[This function places a game piece in the board selected
+	it references a player's chosen game color and drops a 
+	piece in the column of the board at given height
+	]]
+function placePiece(player, columnNumber, board, height)--player, column, board
 	local gp = game.ServerStorage.GamePiece:Clone()
-	gp.Color = color
-	gp.CFrame = startFrame
-	gp.Parent = board.Pieces
+	gp.Color = boards[board][player]["Color"]
+	local gameBoard = workspace.Boards:FindFirstChild(board)
+	local column = gameBoard.BaseBoardParts.Detectors:FindFirstChild(tostring(columnNumber))--Have to convert for Names
+	gp.CFrame = column.CFrame*CFrame.new(Vector3.new(0, 7, 0))
+	gp.Parent = gameBoard.Pieces
 	local tween = game:GetService("TweenService")
 	local tweenInfo = TweenInfo.new(1,Enum.EasingStyle.Bounce,Enum.EasingDirection.Out, 0, false, .5)
 	local result = {}
-	result.CFrame = endFrame
+	result.CFrame = column.CFrame*CFrame.new(Vector3.new(0, -7+(2*height), 0))
 	local tweeny = tween:Create(gp,tweenInfo, result)
 	tweeny:Play()
-end
-
---Starts listeners for mouseclicks on active boards
---also sets up the matrix for storing board data
---when a click is heard, dropPiece is called as well as calculate. 
-
-function initiateClickers(b,p1,p2) --Here b = the board players are using to play
-	
-	local clickedLast --This will hold the player who clicked last
-	detectors = findDetectors(b)
-	local dropped = {0,0,0,0,0,0,0}
-	local gridData = {--gridData[x][y] stores a matrix of the x and y coords.
-		[1]={0,0,0,0,0,0},
-		[2]={0,0,0,0,0,0},
-		[3]={0,0,0,0,0,0},
-		[4]={0,0,0,0,0,0},
-		[5]={0,0,0,0,0,0},
-		[6]={0,0,0,0,0,0},
-		[7]={0,0,0,0,0,0}
-		}
-	
-	--[[This is the part where ClickDetectors listen for MouseClicks
-		if player 1 clicks it, a red piece is dropped,
-	if player 2 clicks, a yellow one is dropped instead]]
-	connections[b.Name]={}
-	for x=1,7 do
-		connections[b.Name][x] = detectors[b.Name][x].ClickDetector.MouseClick:Connect(function(player)
-			local counter = dropped[x]
-				--Line below accounts for players trying to click more than once at a time
-				if player == p1 and counter ~= 12 and clickedLast ~= p1 then--Twioe as much because of parts being 2x2 in size
-					clickedLast = p1
-					dropPiece(b,
-						detectors[b.Name][x].CFrame*CFrame.new(Vector3.new(0, 7, 0)),
-						detectors[b.Name][x].CFrame*CFrame.new(Vector3.new(0, -5+counter, 0)),
-						Color3.new(1,0,0))--red
-					dropped[x] = counter+2
-					gridData[x][1+counter/2]=1
-					wait(1)
-					calculate(gridData,x,(1+counter/2),p1,p2,b)
-					if counter == 10 then -- this filled the column, so check if board is full :)
-						local boardFull = checkBoard(gridData)
-						if boardFull then
-						TieGame(p1, p2, b)
-						end
-					end
-				elseif player == p2 and counter ~= 12 and clickedLast ~= p2 then--Twioe as much because of parts being 2x2 in size
-					clickedLast = p2
-					dropPiece(b,
-						detectors[b.Name][x].CFrame*CFrame.new(Vector3.new(0, 7, 0)),
-						detectors[b.Name][x].CFrame*CFrame.new(Vector3.new(0, -5+counter, 0)),
-						Color3.new(1,1,0))--yellow
-					dropped[x] = counter+2
-					gridData[x][1+counter/2]=2
-					wait(1)
-					calculate(gridData,x,(1+counter/2),p2,p1,b)
-					if counter == 10 then -- this filled the column, so check if board is full :)
-						local boardFull = checkBoard(gridData)
-						if boardFull then
-						TieGame(p1, p2, b)
-						end
-					end
-				else print(player,"isn't allowed to play a move!")
-			end
-		end) --print(connections[b.Name][x],"is at index",x)
+	local winner = calculateMove(board, columnNumber, height, boards[board][player]["PlayerNumber"])--Calculate 4-in-a-row
+	if winner then
+		Winner(board, player)
 	end
 end
-
-
---[[Lobby Functions Below]]--
-
---finds players in table that match with playing and removes them from players
-
-function startGame(p1,p2)
-	if p1~=p2 then
-		print(p1,"and",p2,"are starting a game of Connect 4!")
-		table.insert(playing,p1)
-		table.insert(playing,p2)
-		local newPlayers = {}
-	        for i1,v1 in pairs(players) do
-	            local IsPlaying = false
-	            for i2,v2 in pairs(playing) do
-	                if v1 == v2 then
-	                    IsPlaying = true--player is playing
-	                    break--don't continue to search for more, we found it.
-	                end
-	            end
-	            if not IsPlaying then--all players who are NOT playing
-	                table.insert(newPlayers, v1)
-	            end
-	        end
-		players = newPlayers
-		--print(#players,"After starting a game")
-		local board = nil
-		boards = workspace.Boards:GetChildren()
-		for i,v in pairs(boards) do
-			for n,a in pairs(gameInstances)do
-				if not gameInstances[v] then
-					print(v,"is boards, and instances is",a)
-				else print("using board: ",v)
-				end 
+--[[Function checks matrix of board argument
+	to see if all values are nonzero, aka full
+	if it is, return true, else return false.
+	]]
+function checkMatrix(board)
+	local boardFilled = true
+	for x=1,7 do
+		for y = 1,6 do
+			if boards[board]["Matrix"][x][y] == 0 then
+				boardFilled = false
+				return boardFilled
 			end
-			if v.InUse.Value == false then
-				board = v--found a board, make this value the board
-				board.InUse.Value = true--Hey! We're using this board here!
+		end
+	end
+	return boardFilled
+end
+--[[This checks the matrix of board in the column selected to see
+	if it is available for a piece to be dropped there.
+	]]
+function checkStack(board, column)--Board Name, Column Number
+	
+	local valid = false
+	
+	for y = 1,6 do
+		if boards[board]["Matrix"][column][y] == 0 then--Not last in column and valid
+			valid = true
+			return true, y
+		end
+	end
+	return valid
+end
+--[[Function decides on the server side if a player can click on a board or not
+	by accessing the table of boards and checking if they are a player of that board
+	]]
+local function onGameClickEventFired(player, columnNumber, boardName)
+	local column = tonumber(columnNumber)--Get rid of a lot of bugs off the bat.
+	--print(player, "wants to drop a piece on column", columnNumber,"of the board called",boardName)
+	for i,v in pairs(boards) do
+		if i == boardName then--This board is in boards
+			--print("The board exists in the table")
+			for j,k in pairs(boards[i])do--Cycle through the board's index to find playerName
+				--print("J = ",j)
+				if player.Name == j then--This player is playing this board!
+					--print("This is a valid move!")
+					if boards[i][player.Name]["Turn"]==true then
+						local valid, y = checkStack(boardName, column)--Can we place a piece, how high?
+						if valid then
+							print(y)
+							--boards[i]["Matrix"][column][y] = boards[i][player.Name]["PlayerNumber"]
+							placePiece(player.Name, column, i, y)
+							if y == 6 then
+								local check = checkMatrix(boardName)
+								if check then
+									tieGame(boardName)
+								end
+							end
+							changeTurn(player.Name, boardName)
+						end
+					--print("It is player's turn and dropping a piece is possible")
+					return
+					else --print("It is not your turn!")
+					end
+				end
+			end
+		end
+	end
+end
+ 
+gameClickEvent.OnServerEvent:Connect(onGameClickEventFired)
+--[[This function is called at the beginning of the server and spawns 4 boards.
+	it also generates a matrix for each board and puts it in the boards table
+	inside the index of the board's name.
+]]
+function spawnBoards()
+	for i=1,4 do
+		local board = game.ServerStorage.Connect4Board:Clone()
+		board:SetPrimaryPartCFrame(CFrame.new(Vector3.new(0,6.374,0))
+		*CFrame.Angles(0,math.rad(90)*i,0)
+		*CFrame.new(Vector3.new(-35,0 , 0)))
+		board.Name = board.Name..i
+		board.Parent = game.Workspace.Boards
+		boards[board.Name] = {}
+		boards[board.Name]["InUse"] = false
+		makeMatrix(board.Name)
+	end
+end
+--[[Creates a 7x6 matrix of 0's.
+	]]
+function makeMatrix(board)
+	boards[board]["Matrix"]={}
+	for x = 1,7 do
+		boards[board]["Matrix"][x]={}
+		for y = 1,6 do
+			table.insert(boards[board]["Matrix"][x],0)
+		end
+	end
+	--Verify matrix:
+	local m = boards[board]["Matrix"]
+	--print(m[1][6],m[2][6],m[3][6],m[3][6],m[5][6],m[6][6], m[7][6])
+end
+--[[Starts a game with arguements p1 and p2 which are players
+	searches for an open board (not InUse) and claims it
+	Teleports players to board and sets up table values
+	]]
+function startGame(p1, p2)
+	if p1 ~= p2 then
+		--print("#boards =",#boards)
+		for i,v in pairs(boards) do
+			if v.InUse == false then -- if we found a board to use, then insert the players in the board's table
+				--print(boards[i])
+				v.InUse = true
+				--print(i)
+				boards[i][p1.Name] = {	["Wins"] = 0,--Boards[Board1][Player1] = {[Player1's Stats Here]}
+										["Color"] = Color3.new(1,0,0),--Red}--In the future allow for player choices
+										["PlayerNumber"] = 1,
+										["Turn"] = false,
+										["Partner"] = p2.Name
+										}
+				boards[i][p2.Name] = {	["Wins"] = 0,
+										["Color"] = Color3.new(1,1,0),--Yellow}--In the future allow for player choices
+										["PlayerNumber"] = 2,
+										["Turn"] = false,
+										["Partner"] = p1.Name
+										}
+				for x,y in pairs(boards[i])do
+				--print(x)
+				end
+				local board = workspace.Boards:FindFirstChild(tostring(i))
 				repeat wait() until p1.Character
 				--trapCharacter(player1.Character)
 				p1.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(5,2,0)
 				repeat wait() until p2.Character
 				--trapCharacter(player2.Character)
 				p2.Character.HumanoidRootPart.CFrame = board.BaseBoardParts.Bottom.CFrame * CFrame.new(-5,2,0)
-				initiateClickers(board,p1,p2)
-				gameInstances[board.Name] = {}
-				table.insert(gameInstances[board.Name],1,p1)
-				table.insert(gameInstances[board.Name],2,p2)
-				break
-			else
-				print("We ran out of boards!")--If this breaks here, no boards are available!
-			end
-		end
-	else
-		print("Tried to queue player with self")
-		printTable(players)
-	end
-end
-
---Check players to see if they are ready to play a game
-function checkPlayers()
-	local Ready = true
-	for x = 1,2 do
-		for i,v in pairs(playing) do
-			if players[x] == v then
-				print("Player",players[x],"is in a game")
-				RemoveFromTable(players,v)
-				Ready = false
-			end
-		end
-	end
-	if Ready then
-		return true
-	else print("Not ready for game")
-		startQueue()
-		return false
-	end
-end
-
---If there are two players ready to play, queue them into a game
-
-function startQueue()
-	if #game.Players:GetChildren()>#playing then
-		if #players == 2 then
-			local goodToGo = checkPlayers()
-			if goodToGo then
-				startGame(players[1],players[2])
-			end
-		elseif #players > 2 then --pick random 2 of set
-		local randomNumber = math.random(2,#players)
-			local goodToGo = checkPlayers()
-			if goodToGo then
-				startGame(players[1], players[randomNumber])
-			end
-		end
-	end
-end
-
---not using atm
-function trapCharacter(char)
-	for i,v in pairs(char:GetChildren()) do
-		if v:IsA("Part")then
-			PhysicsService:SetPartCollisionGroup(v, "Characters")
-			print("Added",v.Parent.Name,"'s",v,"to CollisionGroup Characters")
-		end
-	end
-end
-
---When a player spawns, their character loads, add the parts that collide to collision groups
---not using atm
-function characterLoaded(char)
-	for i,v in pairs(char:GetChildren()) do
-		if v:IsA("Part")then
-			--PhysicsService:SetPartCollisionGroup(v, "NotInGame")
-			print("Added",v,"to CollisionGroup NotInGame")
-		end
-	end
-end
-
---when a player joins, check to see if there is enough to queue, if so, send to queue system.
-
-game.Players.PlayerAdded:Connect(function(player)
-	--player.CharacterAdded:Connect(characterLoaded)
-	table.insert(players,player)
-	if #players <= 1 then
-		--print("Need more players")
-	elseif #players >= 2 then
-		startQueue()
-	end
-end)
-
---remove player and partner from all tables when they leave
-
-game.Players.ChildRemoved:Connect(function(player)
-	RemoveFromTable(players, player)
-	RemoveFromTable(playing, player)
-	for i,v in pairs(gameInstances)do
-		for n,t in pairs(gameInstances[i])do
-			--print(gameInstances[i][n])
-			if t == player then
-				for x = 1,2 do -- place the player back into the game cycle, then requeue him, clean board
-					if gameInstances[i][x] ~= player then
-						RemoveFromTable(playing, gameInstances[i][x])
-						table.insert(players, gameInstances[i][x])
-						startQueue()
-						cleanBoard(i)
-						disconnectBoard(board.Name)
-					end
+			    print(p1,"and",p2,"have started a game on",i)
+				local turn = math.random(1,2)
+				if turn == 1 then
+					boards[i][p1.Name]["Turn"] = true
+				elseif turn == 2 then
+					boards[i][p2.Name]["Turn"] = true
+				else print("Error, turn is broken on generate!")
 				end
-				gameInstances[i]={}
-				print(gameInstances[i][n]) --This should be nil
 				break
+			end
+			--print(boards[v.Name])
+		end
+	else print("Error: can't play against self")
+	end
+end
+--[[This function checks the queue table for players
+	If there is enough to start a game, start one
+	If there is more than enough, start one, then requeue
+	]]
+function startQueue()
+	if #queue == 2 then-- Enough to queue one game
+		startGame(queue[1],queue[2])--Start a game with both players
+		print(queue[1], "and", queue[2])
+		queue = {}
+		print("=2")
+	elseif #queue > 2 then-- An extra player(s) will remain
+		startGame(queue[1],queue[2])
+		table.remove(queue,2)
+		table.remove(queue,1)
+		print(">2")
+		startQueue()
+	end
+end
+--[[Adds player to queue when they join the game
+	starts queue after that
+	]]
+game.Players.PlayerAdded:Connect(function(p)--p = player
+	table.insert(queue, p)
+	startQueue()
+end)
+
+--[[This function does the following actions, given a player as argument1:
+	-Remove player and partner from board
+	-Call cleanup board function
+	-Remove Connections for clickers
+	-Sets board.InUse to false
+	-places partner back in queue
+	-starts queue
+	]]
+game.Players.PlayerRemoving:Connect(function(p)
+	
+	for i,v in pairs(queue)do--If player leaving exists in queue, remove from queue
+		if v == p then
+			table.remove(queue,i)
+		end
+	end
+	
+	for board,v in pairs(boards)do
+		for i,z in pairs(boards[board])do
+			if boards[board][p.Name] then -- if player exists
+			local player2 = boards[board][p.Name]["Partner"]
+			local partner = game.Players:FindFirstChild(player2)
+			partner:LoadCharacter()--Respawn partner
+			table.insert(queue, partner)
+			cleanBoard(board)
+			startQueue()
+			return
 			end
 		end
 	end
 end)
+
+spawnBoards()
